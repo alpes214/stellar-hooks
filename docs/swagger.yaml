@@ -1,0 +1,187 @@
+definitions:
+  gin.H:
+    additionalProperties: {}
+    type: object
+  github_com_alpes214_stellar-hooks_internal_models.Subscription:
+    properties:
+      account_id:
+        type: string
+      asset_code:
+        type: string
+      asset_issuer:
+        type: string
+      dest_accounts:
+        items:
+          type: string
+        type: array
+      id:
+        type: integer
+      secret:
+        type: string
+      source_accounts:
+        items:
+          type: string
+        type: array
+      types:
+        items:
+          type: string
+        type: array
+      webhook_url:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /subscriptions:
+    get:
+      description: Retrieve all subscriptions
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_alpes214_stellar-hooks_internal_models.Subscription'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/gin.H'
+      summary: List subscriptions
+      tags:
+      - subscriptions
+    post:
+      consumes:
+      - application/json
+      description: Create a new subscription
+      parameters:
+      - description: Subscription body
+        in: body
+        name: subscription
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alpes214_stellar-hooks_internal_models.Subscription'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_alpes214_stellar-hooks_internal_models.Subscription'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gin.H'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/gin.H'
+      summary: Create subscription
+      tags:
+      - subscriptions
+  /subscriptions/{id}:
+    delete:
+      description: Delete a subscription by ID
+      parameters:
+      - description: Subscription ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gin.H'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gin.H'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/gin.H'
+      summary: Delete subscription
+      tags:
+      - subscriptions
+    get:
+      description: Retrieve a subscription by its ID
+      parameters:
+      - description: Subscription ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alpes214_stellar-hooks_internal_models.Subscription'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gin.H'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gin.H'
+      summary: Get subscription by ID
+      tags:
+      - subscriptions
+    put:
+      consumes:
+      - application/json
+      description: Update an existing subscription by ID
+      parameters:
+      - description: Subscription ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated subscription body
+        in: body
+        name: subscription
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alpes214_stellar-hooks_internal_models.Subscription'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alpes214_stellar-hooks_internal_models.Subscription'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gin.H'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/gin.H'
+      summary: Update subscription
+      tags:
+      - subscriptions
+  /subscriptions/status:
+    get:
+      description: Returns basic store statistics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gin.H'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/gin.H'
+      summary: Subscription store status
+      tags:
+      - subscriptions
+swagger: "2.0"

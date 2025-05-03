@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  webhook:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - nats
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: webhook
+      POSTGRES_PASSWORD: webhook
+      POSTGRES_DB: webhookdb
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  nats:
+    image: nats:2.10
+    ports:
+      - "4222:4222"       # client connections
+      - "8222:8222"       # monitoring
+    command: [
+      "-js",                  # enable JetStream
+      "-m", "8222",           # monitoring port
+      "--store_dir", "/data" # persistence
+    ]
+    volumes:
+      - natsdata:/data
+    restart: unless-stopped
+
+  webhook-listener:
+    build:
+      context: .
+      dockerfile: Dockerfile.testhook
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  natsdata:
