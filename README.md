@@ -26,7 +26,7 @@ It transforms Stellar Horizon SSE streams into secure, real-time HTTP webhooks w
 Start the service:
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 To create a subscription:
