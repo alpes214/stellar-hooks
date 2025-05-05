@@ -47,13 +47,21 @@ func Connect() error {
 	}
 	JetStream = js
 
-	log.Println("✅ Connected to NATS JetStream")
+	log.Println("Connected to NATS JetStream")
 
 	_, err = js.AddStream(&nats.StreamConfig{
 		Name:      "EVENTS",
 		Subjects:  []string{"stellar.events"},
 		Storage:   nats.FileStorage,
 		Retention: nats.LimitsPolicy,
+
+		// Retention tuning
+		MaxAge:   24 * time.Hour,          // Retain messages for 1 days
+		MaxMsgs:  1_000_000,               // (optional) Retain up to 1 million messages
+		MaxBytes: 10 * 1024 * 1024 * 1024, // (optional) 10GB of retained data
+
+		// Other safety features
+		Duplicates: time.Hour, // Prevent duplicate publishing within 1 hour
 	})
 	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
 		return err
@@ -82,7 +90,7 @@ func InitJetStream() {
 	}
 
 	JetStream = js
-	log.Println("✅ Connected to NATS JetStream")
+	log.Println("Connected to NATS JetStream")
 
 	// Create a stream if it doesn’t exist
 	_, err = js.AddStream(&nats.StreamConfig{
@@ -90,6 +98,14 @@ func InitJetStream() {
 		Subjects:  []string{"stellar.events"},
 		Storage:   nats.FileStorage,
 		Retention: nats.LimitsPolicy,
+
+		// Retention tuning
+		MaxAge:   24 * time.Hour,          // Retain messages for 1 days
+		MaxMsgs:  1_000_000,               // (optional) Retain up to 1 million messages
+		MaxBytes: 10 * 1024 * 1024 * 1024, // (optional) 10GB of retained data
+
+		// Other safety features
+		Duplicates: time.Hour, // Prevent duplicate publishing within 1 hour
 	})
 	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
 		log.Fatalf("Failed to create stream: %v", err)

@@ -16,6 +16,12 @@ import (
 )
 
 func StartSSEListenerJetStream() {
+	cursor := "now"
+	if lastCursor, err := jetstream.GetLastCursorFromStream(); err == nil && lastCursor != "" {
+		cursor = lastCursor
+		log.Printf("Resuming Horizon stream from cursor: %s", cursor)
+	}
+
 	horizonURL := os.Getenv("HORIZON_STREAM_URL")
 	if horizonURL == "" {
 		horizonURL = "https://horizon.stellar.org"
@@ -30,16 +36,16 @@ func StartSSEListenerJetStream() {
 
 	ctx := context.Background()
 
-	go streamOperations(ctx, client)
-	go streamPayments(ctx, client)
-	go streamEffects(ctx, client)
+	go streamOperations(ctx, client, cursor)
+	go streamPayments(ctx, client, cursor)
+	go streamEffects(ctx, client, cursor)
 }
 
-func streamOperations(ctx context.Context, client *horizonclient.Client) {
-	request := horizonclient.OperationRequest{Cursor: "now"}
+func streamOperations(ctx context.Context, client *horizonclient.Client, cursor string) {
+	request := horizonclient.OperationRequest{Cursor: cursor}
 
 	for {
-		log.Println("Connecting to Horizon OPERATIONS stream...")
+		log.Printf("Connecting to Horizon OPERATIONS stream with cursor: %s", cursor)
 
 		producer := jetstream.NewJetStreamProducer()
 
@@ -68,11 +74,11 @@ func streamOperations(ctx context.Context, client *horizonclient.Client) {
 	}
 }
 
-func streamPayments(ctx context.Context, client *horizonclient.Client) {
-	request := horizonclient.OperationRequest{Cursor: "now"}
+func streamPayments(ctx context.Context, client *horizonclient.Client, cursor string) {
+	request := horizonclient.OperationRequest{Cursor: cursor}
 
 	for {
-		log.Println("Connecting to Horizon PAYMENTS stream...")
+		log.Printf("Connecting to Horizon PAYMENTS stream with cursor: %s", cursor)
 
 		err := client.StreamPayments(ctx, request, func(op operations.Operation) {
 			log.Printf("Raw Payment Event: %+v\n", op)
@@ -87,11 +93,11 @@ func streamPayments(ctx context.Context, client *horizonclient.Client) {
 	}
 }
 
-func streamEffects(ctx context.Context, client *horizonclient.Client) {
-	request := horizonclient.EffectRequest{Cursor: "now"}
+func streamEffects(ctx context.Context, client *horizonclient.Client, cursor string) {
+	request := horizonclient.EffectRequest{Cursor: cursor}
 
 	for {
-		log.Println("Connecting to Horizon EFFECTS stream...")
+		log.Printf("Connecting to Horizon EFFECTS stream with cursor: %s", cursor)
 
 		err := client.StreamEffects(ctx, request, func(effect effects.Effect) {
 			log.Printf("Raw Effect Event: %+v\n", effect)
