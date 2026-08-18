@@ -164,6 +164,23 @@ func (s *PostgresStore) GetAllSubscriptions() ([]models.Subscription, error) {
 	return s.List()
 }
 
+func (s *PostgresStore) GetCursor(stream string) (string, error) {
+	var cursor string
+	err := s.db.QueryRow(`SELECT cursor FROM stream_cursors WHERE stream = $1`, stream).Scan(&cursor)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return cursor, err
+}
+
+func (s *PostgresStore) SetCursor(stream string, cursor string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO stream_cursors (stream, cursor) VALUES ($1, $2)
+		ON CONFLICT (stream) DO UPDATE SET cursor = EXCLUDED.cursor
+	`, stream, cursor)
+	return err
+}
+
 // DB Initialization
 func InitPostgres() *sql.DB {
 	dsn := os.Getenv("POSTGRES_DSN")
@@ -196,6 +213,10 @@ func MigratePostgres(db *sql.DB) error {
 		dest_accounts JSONB,
 		asset_code TEXT,
 		asset_issuer TEXT
+	);
+	CREATE TABLE IF NOT EXISTS stream_cursors (
+		stream TEXT PRIMARY KEY,
+		cursor TEXT NOT NULL
 	);
 	`
 	_, err := db.Exec(query)

@@ -1,56 +1,59 @@
 package jetstream
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
+
+	"github.com/nats-io/nats.go"
 
 	"github.com/alpes214/stellar-hooks/internal/events"
 )
 
-type JetStreamProducer struct{}
-
-func NewJetStreamProducer() *JetStreamProducer {
-	return &JetStreamProducer{}
+type msgPublisher interface {
+	PublishMsg(m *nats.Msg, opts ...nats.PubOpt) (*nats.PubAck, error)
 }
 
-func (p *JetStreamProducer) PublishEvent(subject string, event *events.Event) error {
+type JetStreamProducer struct {
+	pub     msgPublisher
+	backoff time.Duration
+}
+
+func NewJetStreamProducer() *JetStreamProducer {
+	return &JetStreamProducer{pub: JetStream, backoff: time.Second}
+}
+
+func (p *JetStreamProducer) PublishEvent(ctx context.Context, subject string, event *events.Event) error {
 	data, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 
-	ack, err := JetStream.Publish(subject, data)
-	if err != nil {
-		return fmt.Errorf("failed to publish event to subject %s: %w", subject, err)
+	msg := &nats.Msg{
+		Subject: subject,
+		Data:    data,
+		Header:  nats.Header{},
+	}
+	msg.Header.Set(nats.MsgIdHdr, event.ID)
+
+	backoff := p.backoff
+	if backoff == 0 {
+		backoff = time.Second
 	}
 
-	log.Printf("Published event to JetStream: %s @ %d", subject, ack.Sequence)
-	return nil
-}
-
-func GetLastCursorFromStream() (string, error) {
-	streamName := "EVENTS"
-
-	info, err := JetStream.StreamInfo(streamName)
-	if err != nil {
-		return "", fmt.Errorf("failed to get stream info: %w", err)
+	for {
+		ack, err := p.pub.PublishMsg(msg)
+		if err == nil {
+			log.Printf("Published event to JetStream: %s @ %d", subject, ack.Sequence)
+			return nil
+		}
+		log.Printf("Failed to publish event to JetStream: %v", err)
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("failed to publish event to subject %s: %w", subject, ctx.Err())
+		case <-time.After(backoff):
+		}
 	}
-
-	lastSeq := info.State.LastSeq
-	if lastSeq == 0 {
-		return "", nil // No events yet
-	}
-
-	msg, err := JetStream.GetMsg(streamName, lastSeq)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch last message: %w", err)
-	}
-
-	var evt events.Event
-	if err := json.Unmarshal(msg.Data, &evt); err != nil {
-		return "", fmt.Errorf("failed to unmarshal last event: %w", err)
-	}
-
-	return evt.ID, nil // Horizon's paging_token is stored as evt.ID
 }

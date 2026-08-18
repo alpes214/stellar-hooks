@@ -1,6 +1,7 @@
 package jetstream
 
 import (
+	"errors"
 	"log"
 	"os"
 	"time"
@@ -13,7 +14,7 @@ var (
 	JetStream nats.JetStreamContext
 )
 
-func Connect() error {
+func Connect(onClosed func()) error {
 	natsURL := os.Getenv("NATS_URL")
 	if natsURL == "" {
 		natsURL = "nats://nats:4222"
@@ -23,7 +24,7 @@ func Connect() error {
 		nats.Name("Stellar Hooks"),
 		nats.Timeout(10 * time.Second),
 		nats.ReconnectWait(2 * time.Second),
-		nats.MaxReconnects(10), // Retry up to 10 times
+		nats.MaxReconnects(-1),
 		nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
 			log.Printf("Disconnected from NATS: %v", err)
 		}),
@@ -32,6 +33,9 @@ func Connect() error {
 		}),
 		nats.ClosedHandler(func(nc *nats.Conn) {
 			log.Println("Connection to NATS closed")
+			if onClosed != nil {
+				onClosed()
+			}
 		}),
 	}
 
@@ -49,65 +53,22 @@ func Connect() error {
 
 	log.Println("Connected to NATS JetStream")
 
-	_, err = js.AddStream(&nats.StreamConfig{
-		Name:      "EVENTS",
-		Subjects:  []string{"stellar.events"},
-		Storage:   nats.FileStorage,
-		Retention: nats.LimitsPolicy,
-
-		// Retention tuning
-		MaxAge:   24 * time.Hour,          // Retain messages for 1 days
-		MaxMsgs:  1_000_000,               // (optional) Retain up to 1 million messages
-		MaxBytes: 10 * 1024 * 1024 * 1024, // (optional) 10GB of retained data
-
-		// Other safety features
-		Duplicates: time.Hour, // Prevent duplicate publishing within 1 hour
-	})
-	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
-		return err
+	cfg := &nats.StreamConfig{
+		Name:       "EVENTS",
+		Subjects:   []string{"stellar.events"},
+		Storage:    nats.FileStorage,
+		Retention:  nats.LimitsPolicy,
+		MaxAge:     24 * time.Hour,
+		MaxMsgs:    1_000_000,
+		MaxBytes:   10 * 1024 * 1024 * 1024,
+		Duplicates: time.Hour,
 	}
 
-	return nil
-}
-
-func InitJetStream() {
-	natsURL := os.Getenv("NATS_URL")
-	if natsURL == "" {
-		natsURL = "nats://nats:4222"
+	_, err = js.StreamInfo(cfg.Name)
+	if errors.Is(err, nats.ErrStreamNotFound) {
+		_, err = js.AddStream(cfg)
+	} else if err == nil {
+		_, err = js.UpdateStream(cfg)
 	}
-
-	nc, err := nats.Connect(natsURL,
-		nats.Name("Stellar Hooks"),
-		nats.Timeout(10*time.Second),
-	)
-	if err != nil {
-		log.Fatalf("Failed to connect to NATS: %v", err)
-	}
-
-	js, err := nc.JetStream()
-	if err != nil {
-		log.Fatalf("Failed to initialize JetStream context: %v", err)
-	}
-
-	JetStream = js
-	log.Println("Connected to NATS JetStream")
-
-	// Create a stream if it doesn’t exist
-	_, err = js.AddStream(&nats.StreamConfig{
-		Name:      "EVENTS",
-		Subjects:  []string{"stellar.events"},
-		Storage:   nats.FileStorage,
-		Retention: nats.LimitsPolicy,
-
-		// Retention tuning
-		MaxAge:   24 * time.Hour,          // Retain messages for 1 days
-		MaxMsgs:  1_000_000,               // (optional) Retain up to 1 million messages
-		MaxBytes: 10 * 1024 * 1024 * 1024, // (optional) 10GB of retained data
-
-		// Other safety features
-		Duplicates: time.Hour, // Prevent duplicate publishing within 1 hour
-	})
-	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
-		log.Fatalf("Failed to create stream: %v", err)
-	}
+	return err
 }

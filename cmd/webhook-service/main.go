@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/alpes214/stellar-hooks/internal/api"
@@ -30,20 +31,24 @@ func main() {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	if err := jetstream.Connect(); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	natsDead := make(chan struct{})
+	var closeOnce sync.Once
+	if err := jetstream.Connect(func() {
+		closeOnce.Do(func() { close(natsDead) })
+	}); err != nil {
 		log.Fatalf("JetStream connection failed: %v", err)
 	}
 	defer jetstream.NatsConn.Drain()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	consumer := jetstream.NewJetStreamConsumer("stellar.events", "webhook-subscriber", store)
 	if err := consumer.Start(ctx); err != nil {
 		log.Fatalf("Failed to start JetStream consumer: %v", err)
 	}
 
-	go horizon.StartSSEListenerJetStream()
+	horizonDone := horizon.StartSSEListenerJetStream(ctx, store)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -61,6 +66,13 @@ func main() {
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	<-sigs
-	log.Println("Shutting down gracefully...")
+	select {
+	case <-sigs:
+		log.Println("Shutting down gracefully...")
+	case <-natsDead:
+		log.Println("NATS connection closed; shutting down...")
+	}
+	cancel()
+	horizonDone.Wait()
+	consumer.Wait()
 }
